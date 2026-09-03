@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import sqlite3
@@ -6,11 +6,19 @@ import os
 from cryptography.fernet import Fernet
 from datetime import datetime
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # Local imports
 from pii_masking import mask_pii
 from hospital_agent import run_agent
 
 app = FastAPI(title="Hospital Chatbot API")
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Allow CORS for the frontend (http://localhost:8080 or file://)
 app.add_middleware(
@@ -63,7 +71,8 @@ class ChatResponse(BaseModel):
 
 # --- API Endpoints ---
 @app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(req: ChatRequest):
+@limiter.limit("5/minute")
+async def chat_endpoint(req: ChatRequest, request: Request):
     original_question = req.question
     
     if not original_question.strip():

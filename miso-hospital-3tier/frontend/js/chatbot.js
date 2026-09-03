@@ -58,6 +58,11 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             if (!response.ok) {
+                if (response.status === 429) {
+                    const errData = await response.json();
+                    addMessage("호출 한도를 초과했습니다: " + errData.error, "bot");
+                    return;
+                }
                 throw new Error("API Network error");
             }
 
