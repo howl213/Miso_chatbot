@@ -1,0 +1,45 @@
+/* 취약점 위치를 표시하는 작은 경고 뱃지 */
+.vuln-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #e74c3c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: help;
+  position: relative;
+  vertical-align: middle;
+}
+
+/* hover 시 뜨는 팝업 - JS가 위치를 잡아줌 */
+.vuln-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 320px;
+  background: #2c3e50;
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: none; /* 팝업 위로 마우스가 지나가도 다른 요소 클릭 방해 안 하게 */
+  display: none;
+}
+
+.vuln-tooltip__title {
+  font-weight: bold;
+  color: #ff7675;
+  margin-bottom: 4px;
+}
+
+.vuln-tooltip__label {
+  color: #a9c4d8;
+  font-size: 11px;
+  margin-top: 6px;
+}

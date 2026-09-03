@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>미소 병원 - 회원가입</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/vuln-tooltip.css">
+</head>
+<body>
+    <div class="login-container">
+        <h2>회원가입</h2>
+        <p>환자 정보를 입력해주세요</p>
+
+        <form id="signupForm">
+            <div class="input-group">
+                <label for="username">
+                    아이디
+                    <span class="vuln-badge"
+                          data-vuln-title="User Enumeration"
+                          data-vuln-desc="아이디 중복 여부를 응답 메시지로 그대로 알려줍니다."
+                          data-vuln-attack="이미 있는 아이디(patient1)로 가입을 시도해보세요. '이미 존재하는 아이디입니다'라는 메시지로 계정 존재 여부를 확인할 수 있습니다.">!</span>
+                </label>
+                <input type="text" id="username" placeholder="아이디를 입력하세요">
+            </div>
+            <div class="input-group">
+                <label for="password">
+                    비밀번호
+                    <span class="vuln-badge"
+                          data-vuln-title="평문 비밀번호 저장"
+                          data-vuln-desc="입력한 비밀번호가 해시 처리 없이 DB에 그대로 저장됩니다."
+                          data-vuln-attack="가입 후 DB를 직접 조회(SELECT * FROM patients)하면 비밀번호가 평문 그대로 보입니다.">!</span>
+                </label>
+                <input type="password" id="password" placeholder="비밀번호를 입력하세요">
+            </div>
+            <div class="input-group">
+                <label for="name">이름</label>
+                <input type="text" id="name" placeholder="이름을 입력하세요">
+            </div>
+            <div class="input-group">
+                <label for="rrn">주민등록번호</label>
+                <input type="text" id="rrn" placeholder="990101-1234567">
+            </div>
+            <button type="submit" class="btn-primary">가입하기</button>
+        </form>
+        <p style="margin-top:16px;"><a href="index.html">로그인으로 돌아가기</a></p>
+    </div>
+
+    <script src="js/signup.js"></script>
+    <script src="js/vuln-tooltip.js"></script>
+</body>
+</html>

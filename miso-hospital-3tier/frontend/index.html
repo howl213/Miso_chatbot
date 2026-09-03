@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>미소 병원 - 로그인</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/vuln-tooltip.css">
+    <link rel="stylesheet" href="css/chatbot.css">
+</head>
+<body>
+    <div class="login-container">
+        <h2>
+            미소 병원 의료 시스템
+            <span class="vuln-badge"
+                  data-vuln-title="정보 노출 (Information Disclosure)"
+                  data-vuln-desc="HTML 소스에 테스트용 관리자 계정이 주석으로 그대로 남아있습니다."
+                  data-vuln-attack="개발자도구(F12) → Elements 탭에서 이 근처 HTML 주석을 확인하면 admin 계정 정보를 그대로 볼 수 있습니다.">!</span>
+        </h2>
+        <p>환자 및 의료진 전용 로그인</p>
+
+        <!-- [취약점 포인트] Information Disclosure: 개발자 주석을 지우지 않아 테스트용 계정이 노출됨 -->
+        <!-- Admin Test Account: admin / admin_test_123! -->
+
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="userid">
+                    아이디
+                    <span class="vuln-badge"
+                          data-vuln-title="SQL Injection"
+                          data-vuln-desc="입력값을 검증 없이 쿼리 문자열에 그대로 결합합니다."
+                          data-vuln-attack="아이디에 ' OR '1'='1' -- 를 입력하고 비밀번호는 아무거나 입력해보세요. 인증을 우회할 수 있습니다.">!</span>
+                </label>
+                <input type="text" id="userid" name="userid" placeholder="아이디를 입력하세요">
+            </div>
+            <div class="input-group">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" name="password" placeholder="비밀번호를 입력하세요">
+            </div>
+            <button type="submit" class="btn-primary">
+                로그인
+                <span class="vuln-badge"
+                      data-vuln-title="자동화 공격 (무제한 로그인 시도)"
+                      data-vuln-desc="로그인 실패 횟수에 아무 제한이 없어 무차별 대입이 가능합니다."
+                      data-vuln-attack="poc/brute_force_login.py를 실행해보세요. 지연이나 계정 잠금 없이 연속 시도가 그대로 통과됩니다.">!</span>
+            </button>
+        </form>
+        <p style="margin-top:16px;">
+            <a href="signup.html">회원가입</a>
+        </p>
+        <p class="vuln-note">
+            <span class="vuln-badge"
+                  data-vuln-title="CSRF / 불충분한 세션 관리"
+                  data-vuln-desc="세션 쿠키가 httpOnly:false로 설정되어 있고, CSRF 토큰 검증도 없습니다."
+                  data-vuln-attack="로그인 후 콘솔에서 document.cookie 실행 → 세션 값 노출 확인. poc/csrf-attack.html로 CSRF 공격도 시연 가능합니다.">!</span>
+            세션/CSRF 관련 취약점
+        </p>
+    </div>
+
+    <script src="js/login.js"></script>
+    <script src="js/vuln-tooltip.js"></script>
+    <script src="js/chatbot.js"></script>
+</body>
+</html>

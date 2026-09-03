@@ -1,0 +1,15 @@
+{
+  "name": "miso-hospital-was",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.11.0",
+    "cors": "^2.8.5",
+    "express-session": "^1.18.0"
+  }
+}
