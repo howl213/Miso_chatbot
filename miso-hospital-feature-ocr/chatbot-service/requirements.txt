@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+slowapi
+cryptography
+google-generativeai
+openai
+pydantic
+pymysql
+python-dotenv
