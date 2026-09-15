@@ -9,16 +9,19 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from pii_masking import mask_pii
 from hospital_agent import run_agent
 from audit_summary import build_audit_summary
+from rate_limit_key import get_rate_limit_key
 
 app = FastAPI(title="Hospital Chatbot API")
 
-limiter = Limiter(key_func=get_remote_address)
+# [보안 수정] get_remote_address 대신 환자별 헤더(X-Patient-Id) 기준으로 버킷을 나눈다 -
+# 이 서비스는 WAS를 거쳐서만 호출돼 모든 요청의 소스 IP가 항상 동일했음(RATE_LIMIT_
+# PROMPT_INJECTION_WORKFLOW.md 1번 문제, test_rate_limit.py 참고).
+limiter = Limiter(key_func=get_rate_limit_key)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

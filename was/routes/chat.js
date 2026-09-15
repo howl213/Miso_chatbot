@@ -61,6 +61,10 @@ router.post("/", verifyCsrfToken, async (req, res) => {
         "Content-Type": "application/json",
         // [보안 강화 2026-09-10] chatbot-service가 이 헤더로 호출자를 검증 - config.js 참고
         "X-Internal-Auth": config.chatbotServiceKey,
+        // [보안 수정] chatbot-service의 rate limit이 WAS IP 하나로 전체 환자에게 공용으로
+        // 걸리던 문제 수정용 - 세션에서만 가져온 값이라 클라이언트가 조작 불가(위 IDOR 방지와
+        // 동일한 신뢰 근거). rate_limit_key.py 참고.
+        "X-Patient-Id": String(req.session.patientId),
       },
       body: JSON.stringify({
         question: message,
