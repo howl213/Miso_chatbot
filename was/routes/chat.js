@@ -3,11 +3,12 @@ const pool = require("../db");
 const config = require("../config");
 const { encryptText, decryptText, maskPii } = require("../crypto-utils");
 const { verifyCsrfToken } = require("../middleware/csrf");
+const asyncHandler = require("../middleware/asyncHandler");
 
 const router = express.Router();
 
 // 환자 본인의 상담 이력만 조회 (IDOR 방지: 세션의 patientId만 사용, URL 파라미터로 안 받음)
-router.get("/history", async (req, res) => {
+router.get("/history", asyncHandler(async (req, res) => {
   if (!req.session.patientId) {
     return res.status(401).json({ message: "로그인이 필요합니다." });
   }
@@ -32,7 +33,7 @@ router.get("/history", async (req, res) => {
     }
   }
   res.json(masked);
-});
+}));
 
 // chatbot-service 호출 공통 로직 - /와 /confirm-reservation이 body만 다르게 채워서 재사용한다.
 async function callChatbotService(body) {
@@ -58,7 +59,7 @@ async function callChatbotService(body) {
 //
 // [챗봇팀 요청사항 반영] report_merge.md 3.1 — 챗봇이 "누가 물어보는지" 알아야 본인 예약/진료기록을
 // 조회하는 도구(tools_db.py)를 쓸 수 있으므로, question과 함께 patient_id를 반드시 실어 보낸다.
-router.post("/", verifyCsrfToken, async (req, res) => {
+router.post("/", verifyCsrfToken, asyncHandler(async (req, res) => {
   if (!req.session.patientId) {
     return res.status(401).json({ message: "로그인이 필요합니다." });
   }
@@ -146,7 +147,7 @@ router.post("/confirm-reservation", verifyCsrfToken, async (req, res) => {
   );
 
   res.json({ answer: maskPii(answer) });
-});
+}));
 
 // [보안 수정 2026-09-16] 예약 취소("아니오" 버튼) - 세션의 pending만 지우고 챗봇 서비스는
 // 호출하지 않는다 (확정 시도 자체가 없었으므로).

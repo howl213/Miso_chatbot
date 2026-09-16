@@ -2,6 +2,8 @@ const express = require("express");
 const pool = require("../db");
 const { hasPermission } = require("../middleware/requirePermission");
 const { verifyCsrfToken } = require("../middleware/csrf");
+const asyncHandler = require("../middleware/asyncHandler");
+const { logAuditOnce } = require("../audit");
 
 const router = express.Router();
 
@@ -16,8 +18,13 @@ function maskRecord(record) {
 
 // patient는 본인 것만(records:view:own), staff는 마스킹해서 전체(records:view:masked),
 // admin은 전체를 그대로(records:view:full) 본다. 세 권한 중 하나도 없으면 403.
-router.get("/", async (req, res) => {
+router.get("/", asyncHandler(async (req, res) => {
   if (!req.session.patientId) {
+    logAuditOnce(`no_session:${req.ip}:${req.path}`, null, "admin_path_access_no_session", null, null, {
+      ip: req.ip,
+      path: req.originalUrl,
+      method: req.method,
+    });
     return res.status(401).json({ message: "로그인이 필요합니다." });
   }
 
@@ -47,14 +54,33 @@ router.get("/", async (req, res) => {
     return res.json(rows);
   }
 
+  logAuditOnce(`forbidden:${req.session.patientId}:${req.path}`, req.session.patientId, "admin_path_access_forbidden", null, null, {
+    ip: req.ip,
+    path: req.originalUrl,
+    method: req.method,
+    permission: "records:view:full,records:view:masked,records:view:own",
+    role: req.session.role,
+  });
   return res.status(403).json({ message: "권한이 없습니다." });
-});
+}));
 
-router.post("/", verifyCsrfToken, async (req, res) => {
+router.post("/", verifyCsrfToken, asyncHandler(async (req, res) => {
   if (!req.session.patientId) {
+    logAuditOnce(`no_session:${req.ip}:${req.path}`, null, "admin_path_access_no_session", null, null, {
+      ip: req.ip,
+      path: req.originalUrl,
+      method: req.method,
+    });
     return res.status(401).json({ message: "로그인이 필요합니다." });
   }
   if (!(await hasPermission(req.session.role, "records:write"))) {
+    logAuditOnce(`forbidden:${req.session.patientId}:${req.path}`, req.session.patientId, "admin_path_access_forbidden", null, null, {
+      ip: req.ip,
+      path: req.originalUrl,
+      method: req.method,
+      permission: "records:write",
+      role: req.session.role,
+    });
     return res.status(403).json({ message: "권한이 없습니다." });
   }
 
@@ -68,6 +94,6 @@ router.post("/", verifyCsrfToken, async (req, res) => {
     [patient_id, req.session.patientId, diagnosis, treatment || null]
   );
   res.json({ id: result.insertId, patient_id, written_by: req.session.patientId, diagnosis, treatment });
-});
+}));
 
 module.exports = router;

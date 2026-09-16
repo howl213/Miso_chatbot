@@ -144,7 +144,7 @@ def read_audit_jsonl():
                     "record_id": raw.get("event_id"),
                     "timestamp": raw.get("timestamp"),
                     "actor_id": actor_id,
-                    # chatbot-service/audit-agent/risk_classification.py가 process_event() 안에서
+                    # chatbot-service/audit-agent/risk_classification.py가 prepare_event() 안에서
                     # 이미 계산해 raw(암호화 밖)에 남겨둔 값. 여기서 다시 판정하지 않는다.
                     "risk_level": raw.get("risk_level"),
                     "text_fields": {
@@ -252,6 +252,15 @@ def read_mysql_chat_messages():
 # 판단하므로 mask_pii()가 바뀌어도 이 판정 자체는 깨지지 않는다.
 KNOWN_EXCEPTION_SOURCES = {"mysql_audit"}
 
+# [2026-09-16] chatbot_sqlite/mysql_chat 두 저장소 모두 "원문"에 해당하는 필드(original/
+# response/content)는 애초에 저장 시점에 마스킹을 시도한 적이 없다 - 보호 수단이 마스킹이
+# 아니라 암호화라서, 그 안에서 PII가 "발견"되는 건 버그가 아니라 항상 있을 수 있는 정상
+# 상태다. 반면 masked_text(chatbot_sqlite)는 저장 전에 이미 mask_pii()를 한 번 거친
+# 필드라, 여기서 발견되면 마스킹 로직이 실제로 뭔가를 놓쳤다는 뜻 - 이게 진짜 버그다.
+# 이 구분이 없으면 "발견 건수"가 대부분 정상 원문(raw) 케이스로 채워져서 진짜 마스킹
+# 실패가 그 안에 묻혀버린다.
+PRE_MASKED_FIELD_NAMES = {"masked_text"}
+
 
 def scan_for_pii(records):
     findings = []
@@ -269,6 +278,7 @@ def scan_for_pii(records):
                     "field": field,
                     "masked_preview": masked,
                     "known_exception": record["source"] in KNOWN_EXCEPTION_SOURCES,
+                    "is_masking_failure": field in PRE_MASKED_FIELD_NAMES,
                 })
     return findings
 
@@ -277,7 +287,7 @@ def write_report(findings, output_path):
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["source", "record_id", "timestamp", "actor_id", "field", "masked_preview", "known_exception"],
+            fieldnames=["source", "record_id", "timestamp", "actor_id", "field", "masked_preview", "known_exception", "is_masking_failure"],
         )
         writer.writeheader()
         writer.writerows(findings)
@@ -300,6 +310,10 @@ ADMIN_ANOMALY_ACTIONS = {
     "login_anomaly_admin_repeated_failure",
     "login_anomaly_admin_new_ip",
     "login_anomaly_admin_new_location",
+    # [2026-09-16] was/audit-severity.js와 목록을 동일하게 유지(파일 상단 설명 참고) - 이
+    # action은 WAS 쪽(감사 대시보드 열람)에서만 발생해 audit_jsonl에는 실제로 나타나지
+    # 않지만, 두 파일의 등급 기준을 항상 맞추는 규칙을 지키기 위해 여기도 추가한다.
+    "audit_access_new_location",
 }
 
 # 로그 이벤트로는 나타나지 않는 정적(코드/DB 스키마) 점검 결과. risk_level 흐름과는 완전히

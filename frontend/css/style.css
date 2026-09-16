@@ -331,15 +331,18 @@ body.landing-page {
 }
 
 .hero-visual-icon {
-    width: 38px;
-    height: 38px;
+    width: 46px;
+    height: 46px;
     flex: none;
-    border-radius: 8px;
+    border-radius: 11px;
     background: var(--accent);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    overflow: hidden;
+}
+.hero-visual-icon svg {
+    display: block;
 }
 
 .hero-visual-item strong {
@@ -347,7 +350,7 @@ body.landing-page {
     font-size: 14px;
 }
 
-.hero-visual-item span {
+.hero-visual-item span:not(.hero-visual-icon) {
     display: block;
     font-size: 12.5px;
     color: #cfd9e6;
@@ -381,16 +384,19 @@ body.landing-page {
 }
 
 .quicklink-icon {
-    width: 40px;
-    height: 40px;
+    width: 56px;
+    height: 56px;
     flex: none;
-    border-radius: 10px;
+    border-radius: 14px;
     background: var(--mint-card);
     color: var(--accent);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    overflow: hidden;
+}
+.quicklink-icon svg {
+    display: block;
 }
 
 .quicklink-card strong {
@@ -399,7 +405,7 @@ body.landing-page {
     font-size: 15px;
 }
 
-.quicklink-card span {
+.quicklink-card span:not(.quicklink-icon) {
     display: block;
     color: var(--text-muted);
     font-size: 13px;
@@ -889,6 +895,30 @@ body.landing-page {
     cursor: default;
 }
 
+/* [2026-09-16] 감사 로그 이력 표. 처음엔 높이를 고정하고 스크롤로 처리했는데, 페이지 하나가
+   스크롤 없이 한 화면에 다 보이는 걸 선호해서 방식을 바꿈 - 대신 admin-audit-dashboard.js의
+   renderAuditHistoryTable()이 마지막 페이지처럼 행 수가 모자를 때 빈 행(.audit-history-filler-row)
+   으로 채워 표 높이 자체를 페이지마다 맞춘다. 가로 스크롤만 남겨둔다(좁은 화면 대비).*/
+.audit-history-table-wrap {
+    overflow-x: auto;
+}
+
+/* 빈 채움 행 - 자리(높이)만 차지하고 보이지는 않아야 함. display:none은 높이가 0이 되어
+   버리므로 안 되고, visibility:hidden을 써야 레이아웃 공간은 유지된 채로 안 보이게 된다. */
+.audit-history-filler-row {
+    visibility: hidden;
+}
+
+/* [2026-09-16] Discord 알림 링크로 들어왔을 때 해당 행을 잠깐 눈에 띄게 - 몇 초 뒤
+   admin-audit-dashboard.js가 이 클래스를 다시 떼어내며 원래 배경으로 돌아간다. */
+.audit-history-highlight {
+    animation: audit-history-highlight-flash 2s ease-out;
+}
+@keyframes audit-history-highlight-flash {
+    from { background: #fff3cd; }
+    to { background: transparent; }
+}
+
 .board-table .col-num,
 .board-table .col-date {
     color: var(--text-muted);
@@ -990,6 +1020,7 @@ body.landing-page {
     font-size: 14px;
     line-height: 1.4;
     word-break: break-word;
+    white-space: pre-line;
 }
 .chat-bubble--patient { align-self: flex-end; background-color: #3498db; color: #fff; }
 .chat-bubble--bot { align-self: flex-start; background-color: #ecf0f1; color: #2c3e50; }

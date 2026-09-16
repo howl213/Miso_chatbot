@@ -83,10 +83,14 @@ const LONG_INPUT_MAX_LENGTH = 200;
 const ADMIN_FAILURE_THRESHOLD = 3; // 일반 계정(5)보다 낮게
 
 // 실습/과제 규모라 메모리 저장으로 충분 (서버 재시작 시 초기화됨 - 운영 규모라면 Redis 등으로 교체 필요)
+// 단, 관리자 신규 IP/지역("known" 위치) 기록은 db/init.sql의 admin_known_locations 테이블에
+// 영속화한다 - [보안 수정 2026-09-16] 이것만 인메모리였을 때, WAS 재시작(배포마다 발생)마다
+// "known" 기록이 통째로 사라져서 재시작 직후 첫 로그인은 누구든(TOTP 등록 여부 무관) 그냥
+// 통과되는 실제 보안 공백으로 이어짐 - 운영 중 발견(팀원이 재시작 직후 admin으로 TOTP 없이
+// 로그인됨). 반복 실패/빈도 카운터는 원래도 짧은 시간창(5분/1분) 기준이라 재시작으로 잃어도
+// 영향이 적어 그대로 메모리에 둔다.
 const failuresByUsername = new Map(); // username -> [실패 타임스탬프, ...]
 const attemptsByIp = new Map(); // ip -> [시도 타임스탬프, ...]
-const knownIpsByAdminUsername = new Map(); // admin username -> Set(과거에 성공 로그인했던 IP들)
-const knownRegionsByAdminUsername = new Map(); // admin username -> Set(과거에 성공 로그인했던 지역들)
 
 // [보안 수정 2026-09-14] 위 3개 Map은 전부 "계정 username"을 키로 쓰는데, DB 조회(로그인 판단)는
 // MySQL 기본 콜레이션이 대소문자를 구분 안 해서 "admin"/"Admin"/"ADMIN"이 전부 같은 계정으로
@@ -114,7 +118,7 @@ async function detectLongInput({ username, password, ip }) {
   const passwordLen = (password || "").length;
   if (usernameLen > LONG_INPUT_MAX_LENGTH || passwordLen > LONG_INPUT_MAX_LENGTH) {
     await logAudit(null, "login_anomaly_long_input", "login_attempt", null, {
-      ip, usernameLength: usernameLen, passwordLength: passwordLen, maxAllowed: LONG_INPUT_MAX_LENGTH,
+      ip, path: "/api/login", usernameLength: usernameLen, passwordLength: passwordLen, maxAllowed: LONG_INPUT_MAX_LENGTH,
     });
   }
 }
@@ -151,6 +155,7 @@ async function detectSqlInjectionPattern({ username, password, ip }) {
   // 마스킹하지 않고 원문을 남긴다(단, 로그 비대화 방지를 위해 LONG_INPUT_MAX_LENGTH로 자름).
   await logAudit(null, "login_anomaly_sqli_pattern", "login_attempt", null, {
     ip,
+    path: "/api/login",
     field: usernamePattern ? "username" : "password",
     matchedPattern: usernamePattern || passwordPattern,
     payloadSample: (usernamePattern ? username : password).slice(0, LONG_INPUT_MAX_LENGTH),
@@ -169,7 +174,7 @@ async function detectAbnormalPattern({ username, ip, isFailure, isAdmin }) {
   if (ipAttempts.length === FREQUENCY_THRESHOLD) {
     // 임계값을 "넘어설 때"가 아니라 "정확히 도달한 순간"에만 기록해 같은 이벤트가 매 요청마다 중복 기록되지 않게 함
     await logAudit(null, "login_anomaly_high_frequency", "login_attempt", null, {
-      ip, count: ipAttempts.length, windowMs: FREQUENCY_WINDOW_MS,
+      ip, path: "/api/login", count: ipAttempts.length, windowMs: FREQUENCY_WINDOW_MS,
     });
   }
 
@@ -183,7 +188,7 @@ async function detectAbnormalPattern({ username, ip, isFailure, isAdmin }) {
     const threshold = isAdmin ? ADMIN_FAILURE_THRESHOLD : FAILURE_THRESHOLD;
     if (failures.length === threshold) {
       await logAudit(null, isAdmin ? "login_anomaly_admin_repeated_failure" : "login_anomaly_repeated_failure", "login_attempt", null, {
-        username, ip, count: failures.length, windowMs: FAILURE_WINDOW_MS, threshold,
+        username, ip, path: "/api/login", count: failures.length, windowMs: FAILURE_WINDOW_MS, threshold,
       });
     }
   } else {
@@ -191,45 +196,63 @@ async function detectAbnormalPattern({ username, ip, isFailure, isAdmin }) {
   }
 }
 
-// 로그인을 완성하기 *전에* "이 위치가 새로운가?"만 확인 (맵을 건드리지 않음 - 순수 조회).
-// 관리자가 아직 한 번도 로그인한 적 없으면(맵에 기록 자체가 없으면) "새로움"으로 보지 않는다 -
+// admin_known_locations에서 이 관리자 계정이 아는 IP/지역 전체를 한 번에 가져온다 -
+// isNewAdminLocation/recordAdminLocation 둘 다 "전체를 보고 판단"하는 같은 모양이라 공유.
+async function getKnownAdminLocations(usernameKey) {
+  const [rows] = await pool.query(
+    "SELECT location_type, value FROM admin_known_locations WHERE username = ?",
+    [usernameKey]
+  );
+  const knownIps = new Set(rows.filter((r) => r.location_type === "ip").map((r) => r.value));
+  const knownRegions = new Set(rows.filter((r) => r.location_type === "region").map((r) => r.value));
+  return { knownIps, knownRegions };
+}
+
+// 로그인을 완성하기 *전에* "이 위치가 새로운가?"만 확인 (테이블을 건드리지 않음 - 순수 조회).
+// 관리자가 아직 한 번도 로그인한 적 없으면(기록 자체가 없으면) "새로움"으로 보지 않는다 -
 // 최초 로그인 때부터 인증을 요구하면 계정을 아예 못 쓰게 되므로.
-function isNewAdminLocation({ username, ip }) {
+// [보안 수정 2026-09-16] 예전엔 인메모리 Map이라 WAS 재시작마다 이 기록이 사라졌었다 -
+// admin_known_locations 테이블로 영속화해서 재시작과 무관하게 유지되도록 함(아래 함수들
+// 전체 참고). 로그인 흐름 밖(감사 대시보드 열람 시점, auditLog.js)에서도 재사용한다.
+async function isNewAdminLocation({ username, ip }) {
   const usernameKey = normalizeUsernameKey(username);
-  const knownIps = knownIpsByAdminUsername.get(usernameKey);
-  const isNewIp = knownIps ? !knownIps.has(ip) : false;
+  const { knownIps, knownRegions } = await getKnownAdminLocations(usernameKey);
+  const isNewIp = knownIps.size > 0 ? !knownIps.has(ip) : false;
 
   const region = getRegionForIp(ip);
-  const knownRegions = knownRegionsByAdminUsername.get(usernameKey);
-  const isNewRegion = region && knownRegions ? !knownRegions.has(region) : false;
+  const isNewRegion = region && knownRegions.size > 0 ? !knownRegions.has(region) : false;
 
   return isNewIp || isNewRegion;
 }
 
-// 로그인 성공이 확정된 *후에* 호출: IP/지역을 기록하고, 새로움이 감지되면 감사 로그도 남�다.
+// 로그인 성공이 확정된 *후에* 호출: IP/지역을 기록하고, 새로움이 감지되면 감사 로그도 남긴다.
 // (TOTP 인증까지 통과해서 로그인이 최종 완료된 경우에만 호출 - 여기서 새 위치로 등록해야
 //  다음번 같은 위치 로그인 때는 다시 인증을 요구하지 않는다.)
 async function recordAdminLocation({ username, ip, patientId }) {
   const usernameKey = normalizeUsernameKey(username);
-  const knownIps = knownIpsByAdminUsername.get(usernameKey);
-  if (knownIps && !knownIps.has(ip)) {
+  const { knownIps, knownRegions } = await getKnownAdminLocations(usernameKey);
+
+  if (knownIps.size > 0 && !knownIps.has(ip)) {
     await logAudit(patientId, "login_anomaly_admin_new_ip", "patients", patientId, {
-      username, ip, knownIpCount: knownIps.size,
+      username, ip, path: "/api/login", knownIpCount: knownIps.size,
     });
   }
-  if (!knownIps) knownIpsByAdminUsername.set(usernameKey, new Set([ip]));
-  else knownIps.add(ip);
+  await pool.query(
+    "INSERT IGNORE INTO admin_known_locations (username, location_type, value) VALUES (?, 'ip', ?)",
+    [usernameKey, ip]
+  );
 
   const region = getRegionForIp(ip);
   if (region) {
-    const knownRegions = knownRegionsByAdminUsername.get(usernameKey);
-    if (knownRegions && !knownRegions.has(region)) {
+    if (knownRegions.size > 0 && !knownRegions.has(region)) {
       await logAudit(patientId, "login_anomaly_admin_new_location", "patients", patientId, {
-        username, ip, region, knownRegionCount: knownRegions.size,
+        username, ip, path: "/api/login", region, knownRegionCount: knownRegions.size,
       });
     }
-    if (!knownRegions) knownRegionsByAdminUsername.set(usernameKey, new Set([region]));
-    else knownRegions.add(region);
+    await pool.query(
+      "INSERT IGNORE INTO admin_known_locations (username, location_type, value) VALUES (?, 'region', ?)",
+      [usernameKey, region]
+    );
   }
 }
 
@@ -265,7 +288,7 @@ router.post("/login", loginLimiter, async (req, res) => {
     const passwordMatches = await bcrypt.compare(password, hashToCompare);
 
     if (!patient || !passwordMatches) {
-      logAudit(patient ? patient.id : null, "login_fail", "patients", patient ? patient.id : null, { username });
+      logAudit(patient ? patient.id : null, "login_fail", "patients", patient ? patient.id : null, { username, ip: req.ip, path: "/api/login" });
       await detectAbnormalPattern({ username, ip: req.ip, isFailure: true, isAdmin });
       return res.status(401).json({ success: false, message: "아이디 또는 비밀번호가 올바르지 않습니다." });
     }
@@ -273,7 +296,7 @@ router.post("/login", loginLimiter, async (req, res) => {
     // [관리자 신규 위치 추가 인증] 비밀번호는 맞았지만, 관리자 계정이 TOTP를 등록해뒀고
     // 지금 로그인이 "처음 보는 IP 또는 지역"이면 인증 코드 없이는 세션을 만들어주지 않는다.
     // TOTP를 등록 안 한 관리자는 이 단계를 건너뛴다 (기존처럼 로그인은 되되, 이상 여부만 감사 로그에 남음).
-    if (isAdmin && patient.totp_secret && isNewAdminLocation({ username, ip: req.ip })) {
+    if (isAdmin && patient.totp_secret && (await isNewAdminLocation({ username, ip: req.ip }))) {
       const { totpCode } = req.body;
       if (!totpCode) {
         return res.status(401).json({
@@ -283,10 +306,10 @@ router.post("/login", loginLimiter, async (req, res) => {
         });
       }
       if (!verifyTotpCode(patient.totp_secret, totpCode)) {
-        await logAudit(patient.id, "totp_verify_fail", "patients", patient.id, { username, ip: req.ip });
+        await logAudit(patient.id, "totp_verify_fail", "patients", patient.id, { username, ip: req.ip, path: "/api/login" });
         return res.status(401).json({ success: false, message: "인증 코드가 올바르지 않습니다." });
       }
-      await logAudit(patient.id, "totp_verify_success", "patients", patient.id, { username, ip: req.ip });
+      await logAudit(patient.id, "totp_verify_success", "patients", patient.id, { username, ip: req.ip, path: "/api/login" });
     }
 
     // [보안 강화 #4 세션 관리] 세션 고정 공격 방지를 위해 로그인 성공 시 세션 ID 재발급.
@@ -295,9 +318,15 @@ router.post("/login", loginLimiter, async (req, res) => {
       req.session.patientId = patient.id;
       req.session.patientName = patient.name;
       req.session.role = patient.role;
+      // [2026-09-16] 관리자 신규 위치 탐지(isNewAdminLocation)는 admin_known_locations 조회가
+      // "username" 문자열을 키로 쓰는데, 지금까지 세션엔 patientId/patientName만 있고 username
+      // 자체가 없어서 로그인 이후(예: 감사 대시보드 조회 시점)에는 이 검사를 재사용할 수
+      // 없었다. was/routes/auditLog.js가 "지금 이 조회가 admin의 평소 위치에서 온 게 맞는지"
+      // 확인하려면 username이 세션에 있어야 한다.
+      req.session.username = patient.username;
       // [보안 강화 #5 CSRF] 로그인 시 CSRF 토큰 발급. 이후 상태 변경 요청(POST 등)마다 이 값을 헤더로 첨부해야 함.
       req.session.csrfToken = crypto.randomBytes(24).toString("hex");
-      logAudit(patient.id, "login_success", "patients", patient.id, { username });
+      logAudit(patient.id, "login_success", "patients", patient.id, { username, ip: req.ip, path: "/api/login" });
       await detectAbnormalPattern({ username, ip: req.ip, isFailure: false, isAdmin });
       if (isAdmin) {
         await recordAdminLocation({ username, ip: req.ip, patientId: patient.id });
@@ -378,6 +407,12 @@ router.post("/logout", (req, res) => {
     res.json({ success: true });
   });
 });
+
+// [2026-09-16] was/routes/auditLog.js가 감사 대시보드 조회 자체도 "관리자의 평소 위치에서
+// 온 게 맞는지" 확인할 수 있도록 재사용 - isNewAdminLocation은 순수 조회 함수(맵을 안 건드림)라
+// 로그인 흐름 밖에서 호출해도 안전하다. router는 함수 객체라 프로퍼티를 붙여도
+// app.use("/api", authRoutes)의 동작에는 영향이 없다.
+router.isNewAdminLocation = isNewAdminLocation;
 
 module.exports = router;
 module.exports.isRegisteredPerson = isRegisteredPerson;
