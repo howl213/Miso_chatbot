@@ -12,7 +12,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from pii_masking import mask_pii
-from hospital_agent import run_agent
+from hospital_agent import run_agent, confirm_book_appointment
 from audit_summary import build_audit_summary
 from rate_limit_key import get_rate_limit_key
 
@@ -101,10 +101,20 @@ init_db()
 class ChatRequest(BaseModel):
     question: str
     patient_id: Optional[int] = None  # [통합] WAS가 세션에서 꺼내 넘겨줌 - 예약/기록 조회 도구에 필요
+    # [보안 수정 2026-09-16] 예약 확인 단계(RESERVATION_FLOW_WORKFLOW.md 옵션 A). WAS가
+    # req.session.pendingReservation(서버가 직접 만든 값, 브라우저를 거쳐 왕복한 적 없음)을
+    # 그대로 실어 보낼 때만 True - question은 이 경우 감사 로그 표시용 문구일 뿐 파싱 대상이
+    # 아니다. 이 필드도 verify_internal_caller를 통과한 WAS만 보낼 수 있어 위조 불가.
+    confirm_pending_reservation: bool = False
+    pending_department: Optional[str] = None
+    pending_date_str: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
     masked_question: str
+    # [보안 수정 2026-09-16] 예약 의도가 파싱됐지만 아직 확정 전이면 WAS가 세션에 보관할 수
+    # 있도록 실어 보낸다. 확정/취소/무관한 질문이면 None.
+    pending_reservation: Optional[dict] = None
 
 @app.post("/chat", response_model=ChatResponse)
 @limiter.limit("20/minute")
@@ -130,10 +140,23 @@ def chat_endpoint(req: ChatRequest, request: Request):
         print(f"PII masking error: {e}")
         raise HTTPException(status_code=500, detail="요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.")
 
+    pending_reservation: Optional[dict] = None
+
     # 2. 에이전트 실행. patient_id는 마스킹 대상이 아니라 "누구인지 식별하는 세션 값"이므로
     #    마스킹된 질문과 별도로 그대로 전달한다 (예약/기록 조회 도구가 사용).
+    # [보안 수정 2026-09-16] 예약 확인(버튼) 요청이면 자유 텍스트 파싱(run_agent/choose_action)을
+    # 아예 타지 않고, WAS 세션에 저장돼 있던 pending 값으로 바로 confirm_book_appointment를
+    # 호출한다 - 확인 시점에 원문을 다시 파싱할 이유가 없고, 그러면 파싱 결과가 확인 메시지와
+    # 달라질 가능성(re-parse drift)도 원천 차단된다.
     try:
-        answer = run_agent(masked_question, patient_id=req.patient_id)
+        if req.confirm_pending_reservation:
+            if not req.pending_department or not req.pending_date_str:
+                raise HTTPException(status_code=400, detail="확인할 예약 정보가 없습니다.")
+            answer = confirm_book_appointment(req.pending_department, req.pending_date_str, req.patient_id)
+        else:
+            answer, pending_reservation = run_agent(masked_question, patient_id=req.patient_id)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Agent error: {e}")
         answer = "죄송합니다. 현재 챗봇 서비스에 문제가 발생했습니다."
@@ -152,7 +175,7 @@ def chat_endpoint(req: ChatRequest, request: Request):
     except Exception as e:
         print(f"DB Logging error: {e}")
 
-    return ChatResponse(answer=answer, masked_question=masked_question)
+    return ChatResponse(answer=answer, masked_question=masked_question, pending_reservation=pending_reservation)
 
 # [체크리스트 7번 - 대시보드 1단계] WAS 관리자 화면이 감사로그를 보여주려면, WAS 자신의
 # MySQL(mysql_audit)은 직접 조회할 수 있지만 챗봇 쪽 3개 저장소(audit_jsonl/chatbot_sqlite/
