@@ -158,15 +158,9 @@ def test_ner_catches_name_at_end_of_sentence():
 
 # --- 알려진 미해결 버그 (2026-09-16 확인, xfail로 명시) ---
 
-@pytest.mark.xfail(
-    reason=(
-        "실제 재현됨: _NAME_TAIL_BOUNDARY의 \\b(단어 경계)가 '공백 뒤 아무 글자'면 거의 항상 "
-        "통과하는 구멍이라 '강남역'(성씨 '강'으로 시작)이 이름으로 오탐 마스킹됨. "
-        "origin/main 커밋 3715733에서 \\b 제거로 이미 해결됨 - 로컬 chatbot 브랜치만 미반영. "
-        "고치는 순간 이 테스트는 XPASS로 바뀌어야 하며, 그때 xfail 마커를 지울 것."
-    ),
-    strict=True,
-)
+# [2026-09-16 해결됨] pii_masking.py를 origin/main 커밋 3715733 기준으로 동기화하면서
+# _NAME_TAIL_BOUNDARY의 \b 제거가 반영되어 이 버그는 더 이상 재현되지 않는다.
+# xfail 마커 제거 - 이제 일반 회귀 테스트로 취급.
 def test_place_name_ending_in_station_is_not_masked_as_name():
     assert mask_pii("나는 강남역 근처에 있어요") == "나는 강남역 근처에 있어요"
 

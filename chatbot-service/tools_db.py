@@ -85,6 +85,22 @@ def book_appointment(patient_id: int, date_str: str, department: str) -> str:
         return f"진료 예약 중 오류가 발생했습니다: {str(e)}"
 
 
+def get_patient_name(patient_id: int) -> "str | None":
+    """[실명 인증 연계] pii_masking.py가 '본인 등록 이름'을 우선 마스킹하기 위해 조회한다
+    (IDENTITY_VERIFICATION_WORKFLOW.md 참고). patient_id가 없거나 조회 실패 시 None -
+    호출부(app.py)가 own_name=None으로 mask_pii를 호출하면 기존 로직(화이트리스트+NER)으로
+    그대로 폴백되므로 안전하다."""
+    if not patient_id:
+        return None
+
+    conn = get_connection()
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT name FROM patients WHERE id = %s", (patient_id,))
+        row = cursor.fetchone()
+    conn.close()
+    return row["name"] if row else None
+
+
 def check_appointments(patient_id: int) -> str:
     """환자의 최근 예약(최대 3건)을 조회합니다."""
     if not patient_id:

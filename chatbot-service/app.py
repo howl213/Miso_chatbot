@@ -15,6 +15,8 @@ from pii_masking import mask_pii
 from hospital_agent import run_agent, confirm_book_appointment
 from audit_summary import build_audit_summary
 from rate_limit_key import get_rate_limit_key
+from mock_pass import verify_identity
+from tools_db import get_patient_name
 
 app = FastAPI(title="Hospital Chatbot API")
 
@@ -134,8 +136,17 @@ def chat_endpoint(req: ChatRequest, request: Request):
     # 1. PII 마스킹 (LLM에게는 마스킹된 질문만 전달 - 원문이 외부 LLM API로 나가지 않게 함)
     # fail-closed: 마스킹 자체가 실패했는데 그냥 진행하면 원문이 그대로 LLM으로 나갈 수 있으므로,
     # 이 단계에서 예외가 나면 요청을 막는다 (아래 2/3단계처럼 "일단 진행"하지 않음).
+    # [실명 인증 연계 2026-09-16] 로그인한 환자의 등록 이름을 조회해서 넘기면, 트리거 단어
+    # 없이도 본인 이름을 우선 마스킹한다(IDENTITY_VERIFICATION_WORKFLOW.md 6번). 조회 실패해도
+    # own_name=None으로 기존 로직에 그대로 폴백되므로 이 조회 자체가 요청을 막을 이유는 없다.
     try:
-        masked_question = mask_pii(original_question)
+        own_name = get_patient_name(req.patient_id)
+    except Exception as e:
+        print(f"Patient name lookup error (own_name fallback to None): {e}")
+        own_name = None
+
+    try:
+        masked_question = mask_pii(original_question, own_name=own_name)
     except Exception as e:
         print(f"PII masking error: {e}")
         raise HTTPException(status_code=500, detail="요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.")
@@ -187,6 +198,24 @@ def chat_endpoint(req: ChatRequest, request: Request):
 async def audit_summary_endpoint(request: Request):
     verify_internal_caller(request)
     return build_audit_summary()
+
+
+class VerifyIdentityRequest(BaseModel):
+    name: str
+    rrn: str
+
+class VerifyIdentityResponse(BaseModel):
+    verified: bool
+
+# [실명 인증 - 모의 PASS, 2026-09-16] 강사님 피드백: 회원가입 시 이름/주민번호를 그대로
+# 텍스트로만 받아서 "김치볶음밥" 같은 가짜 이름으로도 가입되던 문제. WAS의 회원가입
+# 라우트(auth.js)가 계정 생성 전에 이 엔드포인트로 실제 등록된 사람(human.csv)인지
+# 확인한다 - /chat과 동일하게 내부 서비스 호출만 허용(브라우저 직접 접근 차단).
+# (IDENTITY_VERIFICATION_WORKFLOW.md 참고)
+@app.post("/internal/verify-identity", response_model=VerifyIdentityResponse)
+def verify_identity_endpoint(req: VerifyIdentityRequest, request: Request):
+    verify_internal_caller(request)
+    return VerifyIdentityResponse(verified=verify_identity(req.name, req.rrn))
 
 
 if __name__ == "__main__":
