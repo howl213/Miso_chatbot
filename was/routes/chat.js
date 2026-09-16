@@ -104,12 +104,12 @@ router.post("/", verifyCsrfToken, asyncHandler(async (req, res) => {
   );
 
   res.json({ answer: maskPii(answer), needsConfirmation });
-});
+}));
 
 // [보안 수정 2026-09-16] 예약 확인("예" 버튼). 클라이언트는 department/date_str 같은 예약
 // 내용을 전혀 보내지 않는다 - 세션에 저장해둔 pendingReservation(서버가 직접 만든 값)만
 // 사용하므로 요청 body를 조작해도 다른 시간/진료과로 바꿔치기할 수 없다.
-router.post("/confirm-reservation", verifyCsrfToken, async (req, res) => {
+router.post("/confirm-reservation", verifyCsrfToken, asyncHandler(async (req, res) => {
   if (!req.session.patientId) {
     return res.status(401).json({ message: "로그인이 필요합니다." });
   }
@@ -151,7 +151,7 @@ router.post("/confirm-reservation", verifyCsrfToken, async (req, res) => {
 
 // [보안 수정 2026-09-16] 예약 취소("아니오" 버튼) - 세션의 pending만 지우고 챗봇 서비스는
 // 호출하지 않는다 (확정 시도 자체가 없었으므로).
-router.post("/cancel-reservation", verifyCsrfToken, async (req, res) => {
+router.post("/cancel-reservation", verifyCsrfToken, asyncHandler(async (req, res) => {
   if (!req.session.patientId) {
     return res.status(401).json({ message: "로그인이 필요합니다." });
   }
@@ -164,6 +164,6 @@ router.post("/cancel-reservation", verifyCsrfToken, async (req, res) => {
   );
 
   res.json({ answer });
-});
+}));
 
 module.exports = router;
