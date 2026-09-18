@@ -20,8 +20,8 @@ load_dotenv(dotenv_path=current_dir / ".env")
 sys.path.insert(0, str(parent_dir))
 
 import importlib
-# 동적으로 audit-agent 로드
-audit_agent = importlib.import_module("audit-agent")
+# 동적으로 audit_agent 로드
+audit_agent = importlib.import_module("audit_agent")
 AuditEngine = audit_agent.engine.AuditEngine
 
 # 2. KMS (.env 연동)

@@ -5,7 +5,7 @@
 각각 복호화해서 공통 스키마로 뽑아내고(1단계), pii_masking.mask_pii()로 마스킹 안 된 PII가
 남아있는 필드를 찾아 리포트로 남긴다(3단계).
 
-2단계(탐지 로직 자체)는 팀원이 이미 pii_masking.py/audit-agent/masking.py에 구현·통합해뒀으므로
+2단계(탐지 로직 자체)는 팀원이 이미 pii_masking.py/audit_agent/masking.py에 구현·통합해뒀으므로
 여기서는 그 결과물(mask_pii)을 블랙박스로 호출만 한다 — 탐지 로직 자체를 재구현하지 않음.
 "PII 종류(type)"까지는 분류하지 않기로 결정함(2026-09-10) — "발견 여부 + 위치 + 안전한 미리보기"만으로
 원래 목적(사후 감사)은 충분하고, 종류 분류는 mask_pii()의 치환 토큰 문자열에 의존하게 돼서
@@ -33,13 +33,13 @@ from dotenv import load_dotenv
 CHATBOT_SERVICE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CHATBOT_SERVICE_DIR.parent
 
-# audit-agent(chatbot-service/audit-agent/)와 pii_masking을 패키지로 import하기 위해
+# audit_agent(chatbot-service/audit_agent/)와 pii_masking을 패키지로 import하기 위해
 # chatbot-service 자체를 sys.path에 추가 — uvicorn --app-dir로 뜰 때와 달리 이 스크립트는
 # 단독 실행되므로 직접 챙겨야 함. 아래 두 import보다 반드시 먼저 실행돼야 함.
 if str(CHATBOT_SERVICE_DIR) not in sys.path:
     sys.path.insert(0, str(CHATBOT_SERVICE_DIR))
 
-audit_agent = import_module("audit-agent")
+audit_agent = import_module("audit_agent")
 AuditCrypto = audit_agent.crypto.AuditCrypto
 
 from pii_masking import mask_pii
@@ -144,7 +144,7 @@ def read_audit_jsonl():
                     "record_id": raw.get("event_id"),
                     "timestamp": raw.get("timestamp"),
                     "actor_id": actor_id,
-                    # chatbot-service/audit-agent/risk_classification.py가 prepare_event() 안에서
+                    # chatbot-service/audit_agent/risk_classification.py가 prepare_event() 안에서
                     # 이미 계산해 raw(암호화 밖)에 남겨둔 값. 여기서 다시 판정하지 않는다.
                     "risk_level": raw.get("risk_level"),
                     "text_fields": {
@@ -295,7 +295,7 @@ def write_report(findings, output_path):
 
 # ── 4단계 — 감사 기준(SECURITY_AUDIT_CRITERIA.md) 적용 + CLI/CSV 리포트 ───────────
 # 위험도 "판정"은 여기서 다시 하지 않는다 — was/risk-classification.js와
-# chatbot-service/audit-agent/risk_classification.py가 로그를 기록하는 시점에 이미 계산해서
+# chatbot-service/audit_agent/risk_classification.py가 로그를 기록하는 시점에 이미 계산해서
 # audit_log.risk_level 컬럼(mysql_audit)/JSONL 최상위 평문 필드(audit_jsonl)에 저장해뒀으므로,
 # 여기서는 그 값을 그대로 읽어 SECURITY_AUDIT_CRITERIA.md의 4단계(Critical/High/Medium/Low)로
 # 옮겨 표시만 한다. 등급 기준을 이 파일에 따로 중복 관리하지 않으므로, risk-classification.js/

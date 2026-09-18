@@ -6,7 +6,7 @@ from .masking import AuditMasking  # 새롭게 추가된 마스킹 모듈
 from .risk_classification import classify_risk
 
 # [Discord 실시간 알림] audit_notify는 chatbot-service/ 바로 아래에 있는 모듈이라(이 파일이
-# 속한 audit-agent 패키지 밖) 상대 import가 안 됨. uvicorn --app-dir로 뜰 때는 chatbot-service가
+# 속한 audit_agent 패키지 밖) 상대 import가 안 됨. uvicorn --app-dir로 뜰 때는 chatbot-service가
 # 이미 sys.path에 있어 바로 import되지만, 이 패키지만 단독으로 로드되는 경우를 대비해
 # log_audit_tool.py와 동일한 방식(파일 위치 기준 절대경로)으로 한 번 더 챙긴다.
 try:

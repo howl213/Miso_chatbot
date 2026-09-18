@@ -56,7 +56,7 @@
 - 시스템 프롬프트 유출 탐지는 "지시문 원문 전체가 그대로 포함"되는 경우만 잡음 — LLM이 지시문을 요약/의역해서 유출하면 탐지 못할 수 있음(다만 이는 원문 그대로 노출되는 것보다 위험도가 낮음).
 
 ### 회귀 확인
-기존 테스트 `test_shared_vectors.py`(12), `audit-agent/test_masking_secrets.py`(11), `test_audit_notify.py`(5) 전부 재실행 통과. 신규 테스트 10건 포함 총 38건 통과, 실패 없음.
+기존 테스트 `test_shared_vectors.py`(12), `audit_agent/test_masking_secrets.py`(11), `test_audit_notify.py`(5) 전부 재실행 통과. 신규 테스트 10건 포함 총 38건 통과, 실패 없음.
 
 ---
 

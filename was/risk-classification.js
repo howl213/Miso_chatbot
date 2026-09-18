@@ -1,5 +1,5 @@
 // 감사 로그(audit_log) 이벤트의 위험도(상/중/하)를 분류하고, 저장 전 식별정보를 마스킹한다.
-// 챗봇 쪽 감사 로그(chatbot-service/audit-agent/risk_classification.py)와 등급 기준·마스킹 방식을
+// 챗봇 쪽 감사 로그(chatbot-service/audit_agent/risk_classification.py)와 등급 기준·마스킹 방식을
 // 동일하게 맞춰서, 로그를 보는 관리자가 두 파이프라인을 같은 잣대로 읽을 수 있게 한다.
 // 자세한 분류 근거는 SECURITY_THREAT_MODEL.md 참고.
 

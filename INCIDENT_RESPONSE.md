@@ -19,9 +19,9 @@ flowchart LR
     E --> G
 ```
 
-- **분류**: `was/risk-classification.js` / `chatbot-service/audit-agent/risk_classification.py` — action 기준 상/중/하
+- **분류**: `was/risk-classification.js` / `chatbot-service/audit_agent/risk_classification.py` — action 기준 상/중/하
 - **기록**: MySQL `audit_log`(WAS), `audit-logs/audit_log.jsonl`(챗봇), 둘 다 `risk_level` 평문 컬럼 포함
-- **알림**: `risk_level === "high"`일 때만 Discord — WAS는 `was/audit.js:17`에서, 챗봇은 `chatbot-service/audit-agent/engine.py:61`에서 각각 독립적으로 게이트
+- **알림**: `risk_level === "high"`일 때만 Discord — WAS는 `was/audit.js:17`에서, 챗봇은 `chatbot-service/audit_agent/engine.py:61`에서 각각 독립적으로 게이트
 - **조회**: `frontend/admin-audit-dashboard.html` — KPI 요약, Critical/High 표, PII 마스킹 발견 내역, 전체 이력(등급 필터+페이지네이션)
 
 **이 문서의 범위**: 위 흐름(`audit_log` 기반 위험도 분류→기록→알림→조회)만 다룬다. 로그인(15분 5회)/OCR(분당 10회)/챗봇(분당 20회) rate limit은 이 흐름과 완전히 별개로 동작하는 자동 요청 제한 계층이다 — `audit_log`에 안 남고 Discord 알림도 안 가지만, 반복 요청 자체는 이미 자동으로 막고 있다. 즉 "자동 방어가 TOTP 하나뿐"이라는 아래 3번 설명은 이 `audit_log` 흐름 안에서만 유효하고, rate limit까지 포함하면 자동 방어가 이미 하나 더 있는 셈이다.
@@ -31,7 +31,7 @@ flowchart LR
 | 항목 | 구현 위치 | 상태 |
 |---|---|---|
 | 로그인 이상탐지 (반복실패/고빈도/긴입력/관리자 신규위치/SQLi 패턴) | `was/routes/auth.js`, `was/totp-utils.js` | ✅ 16개 시나리오 PASS 검증 완료 (SQLi 패턴은 2026-09-14 추가, 별도 검증) |
-| 챗봇 프롬프트 인젝션 탐지 | `chatbot-service/audit-agent/masking.py` `MALICIOUS_INTENT_DETECTED` | ✅ |
+| 챗봇 프롬프트 인젝션 탐지 | `chatbot-service/audit_agent/masking.py` `MALICIOUS_INTENT_DETECTED` | ✅ |
 | PII/민감정보 마스킹 미탐지 스캔 | `chatbot-service/log_audit_tool.py` `scan_for_pii()` | ✅ 347건 스캔 실측 |
 | 위험도 분류 (상/중/하 → Critical/High/Medium/Low) | `risk-classification.js`/`.py`, `audit-severity.js` | ✅ |
 | 실시간 알림 | `discord-notify.js`, `audit_notify.py` | ✅ 두 서비스 각각 독립 구현, 5분 디바운스 |
@@ -61,7 +61,7 @@ flowchart LR
 | `login_success`/`login_fail`/`totp_verify_success`/`totp_enrolled`/`patient_register` | 하 | 정상 흐름 |
 | *(매핑 없음, 신규 action)* | **중** | 안전측 기본값 — 조용히 저위험 취급되는 것 방지 |
 
-**챗봇 — `chatbot-service/audit-agent/risk_classification.py`**
+**챗봇 — `chatbot-service/audit_agent/risk_classification.py`**
 
 | 조건 | 등급 | 근거 |
 |---|---|---|

@@ -1,6 +1,6 @@
 """
 [테스트 추가] pii_masking.py의 mask_pii()를 검증하는 자동화 pytest가 하나도 없었음
-(audit-agent/test_masking_secrets.py는 다른 파일 대상). 기존에 파일 하단 __main__
+(audit_agent/test_masking_secrets.py는 다른 파일 대상). 기존에 파일 하단 __main__
 블록에 있던 수동 확인용 케이스들을 pytest 회귀 테스트로 옮긴다. 순수 테스트 추가라
 기존 코드는 건드리지 않았다.
 

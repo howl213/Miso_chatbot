@@ -1,5 +1,5 @@
 """
-TDD 통합 테스트 (구조 변경 반영: audit-agent가 chatbot-service/ 안으로 이동됨)
+TDD 통합 테스트 (구조 변경 반영: audit_agent가 chatbot-service/ 안으로 이동됨)
 AuditMasking이 pii_masking.mask_pii()를 통해 내부 URL/API 키까지 거르는지 검증.
 실제 실행 환경(uvicorn --app-dir chatbot-service)과 동일하게 sys.path를 구성한다.
 """
@@ -8,12 +8,12 @@ import importlib
 import unittest
 from pathlib import Path
 
-# 이 파일 위치: chatbot-service/audit-agent/test_masking_secrets.py
-# parent.parent = chatbot-service/ (pii_masking.py와 audit-agent 둘 다 여기 바로 아래 있음)
+# 이 파일 위치: chatbot-service/audit_agent/test_masking_secrets.py
+# parent.parent = chatbot-service/ (pii_masking.py와 audit_agent 둘 다 여기 바로 아래 있음)
 chatbot_service_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(chatbot_service_dir))
 
-masking_module = importlib.import_module("audit-agent.masking")
+masking_module = importlib.import_module("audit_agent.masking")
 AuditMasking = masking_module.AuditMasking
 
 

@@ -214,8 +214,8 @@ router.get("/", requirePermission("documents:view"), ...);
 
 | | 내용 |
 |---|---|
-| 신규 파일 | `was/risk-classification.js`, `chatbot-service/audit-agent/risk_classification.py`, `SECURITY_THREAT_MODEL.md`, `RISK_DETECTION_GUIDE.md` |
-| 수정 파일 | `was/audit.js`(기록 시점에 등급 분류·마스킹 적용), `was/routes/auditLog.js`(`risk_level` 응답 포함, `?risk=` 필터), `db/init.sql`(`audit_log.risk_level` 컬럼 추가 — **재시딩 필요**), `chatbot-service/audit-agent/engine.py`(마스킹 다음 단계로 등급 분류 수행) |
+| 신규 파일 | `was/risk-classification.js`, `chatbot-service/audit_agent/risk_classification.py`, `SECURITY_THREAT_MODEL.md`, `RISK_DETECTION_GUIDE.md` |
+| 수정 파일 | `was/audit.js`(기록 시점에 등급 분류·마스킹 적용), `was/routes/auditLog.js`(`risk_level` 응답 포함, `?risk=` 필터), `db/init.sql`(`audit_log.risk_level` 컬럼 추가 — **재시딩 필요**), `chatbot-service/audit_agent/engine.py`(마스킹 다음 단계로 등급 분류 수행) |
 | 핵심 설계 | 등급은 **탐지 시점에** 확정해 저장(사후 재분류 아님). 챗봇 쪽은 악성 의도(프롬프트 인젝션 등)가 탐지되면 원래 action의 등급과 무관하게 "상"으로 강제 승격. 매핑에 없는 신규 이벤트는 기본값을 "하"가 아니라 "중"으로 두어 조용히 저위험 취급되는 것을 방지 |
 | 마스킹 범위 | 아이디만 부분 마스킹(`admin` → `adm**`), IP는 침해 대응에 필요해 그대로 유지. 기존 로그는 소급 마스킹하지 않음(챗봇 JSONL은 해시체인 구조상 과거 레코드 수정이 원천적으로 불가) |
 
@@ -232,7 +232,7 @@ router.get("/", requirePermission("documents:view"), ...);
   "시스템 접근 정보"가 그대로 남을 수 있다는 문제의식에서 별도 마스킹 계층을 설계.
 - **수정 내용**: `pii_masking.py`에 `mask_secrets()` 신설 — ①내부 URL/사설 IP ②알려진 API 키
   시그니처(AWS/GitHub/Slack/Anthropic/OpenAI/JWT) ③키워드 문맥(`api_key=` 등) ④엔트로피
-  기반 폴백, 4단계 탐지. `audit-agent/masking.py`/`audit_decorator.py` 정리, JS쪽
+  기반 폴백, 4단계 탐지. `audit_agent/masking.py`/`audit_decorator.py` 정리, JS쪽
   (`was/crypto-utils.js`)에도 동일 로직 이식.
 - **문제**: PII 마스킹과 시크릿 마스킹이 서로 다른 순서로 실행되면 사설 IP 끝자리가 다른
   패턴에 잘못 먹히는 등 상호 간섭 위험이 있었음.
@@ -262,7 +262,7 @@ router.get("/", requirePermission("documents:view"), ...);
 - **설계 의도**: 감사 로그 대시보드는 "조회형" 화면이라, 관리자 세션이 탈취되면 침입자도
   똑같은 화면을 볼 수 있다는 한계가 있음. 그 세션과 무관한 별도 알림 채널이 필요했음.
 - **수정 내용**: `audit_notify.py`/`was/discord-notify.js`로 웹훅 POST 헬퍼 작성 (같은
-  action+actor는 5분 내 재발송 안 함, 한글 라벨/사유/등급 표시). `audit-agent/engine.py`/
+  action+actor는 5분 내 재발송 안 함, 한글 라벨/사유/등급 표시). `audit_agent/engine.py`/
   `was/audit.js`에서 `risk_level=high`가 계산되는 시점에 fire-and-forget으로 호출해, 알림
   실패가 원래 요청 처리를 막지 않게 함. TDD로 테스트를 먼저 작성한 뒤 구현.
 - **문제**: 실제 웹훅으로 종단 테스트하는 과정에서, 파이썬 `urllib`의 기본 User-Agent를

@@ -1,10 +1,10 @@
 import sys
 from pathlib import Path
 
-# [2026-09-XX 구조 변경 반영] audit-agent가 프로젝트 루트가 아니라 chatbot-service/ 안으로
-# 이동했다. 즉 이 파일(chatbot-service/audit-agent/masking.py) 기준으로 pii_masking.py는
+# [2026-09-XX 구조 변경 반영] audit_agent가 프로젝트 루트가 아니라 chatbot-service/ 안으로
+# 이동했다. 즉 이 파일(chatbot-service/audit_agent/masking.py) 기준으로 pii_masking.py는
 # 이제 한 단계만 올라가면 있다 (parent.parent가 곧 chatbot-service 디렉터리 자체).
-# 예전 구조(프로젝트 루트/audit-agent, 프로젝트 루트/chatbot-service)에서 쓰던
+# 예전 구조(프로젝트 루트/audit_agent, 프로젝트 루트/chatbot-service)에서 쓰던
 # "parent.parent / chatbot-service" 계산은 새 구조에서는 chatbot-service/chatbot-service라는
 # 존재하지 않는 경로를 만들어버리므로 반드시 함께 고쳐야 했다.
 _chatbot_service_dir = Path(__file__).resolve().parent.parent
