@@ -21,9 +21,25 @@ const auditLogRoutes = require("./routes/auditLog");
 const chatRoutes = require("./routes/chat");
 const holidaysRoutes = require("./routes/holidays");
 const totpRoutes = require("./routes/totp");
+const ipBlocklistRoutes = require("./routes/ipBlocklist");
+const { ipBlocklistMiddleware } = require("./middleware/ipBlocklist");
 const { logAudit } = require("./audit");
 
 const app = express();
+
+// [배포 2026-09-15] nginx 같은 리버스 프록시 뒤에서 돌 때, 이걸 안 하면 req.ip가 항상
+// 프록시(127.0.0.1)로 잡혀서 was/routes/auth.js의 IP 기반 로그인 이상탐지(신규 IP/빈도)가
+// 전부 무의미해지고, express-session의 secure 쿠키도 X-Forwarded-Proto를 못 믿어서
+// Set-Cookie 자체가 누락된다(실제 배포 중 로그인은 200인데 세션이 안 생기는 증상으로 발견).
+// "1"은 "가장 가까운 프록시 1홉만 신뢰"라는 뜻 - nginx 하나만 거치는 구조라 이 값이면
+// 충분하고, 범위를 넓히면 클라이언트가 X-Forwarded-For를 위조해 IP를 속일 수 있어 위험하다.
+// 로컬 개발(프록시 없음)에서는 X-Forwarded-For 헤더 자체가 없어서 영향 없음.
+app.set("trust proxy", 1);
+
+// [2026-09-16] IP 차단(was/routes/ipBlocklist.js) - CORS/세션/바디 파싱보다도 먼저 걸어서,
+// 차단된 IP는 그 이후 어떤 처리 비용도 들이지 않고 바로 거절한다. req.ip가 정확해야 하므로
+// trust proxy 설정 바로 다음이어야 한다.
+app.use(ipBlocklistMiddleware);
 
 // [안정성 강화] 라우트 코드에서 놓친 예외(예: 암호화 키 변경으로 인한 복호화 실패)가
 // 서버 프로세스 전체를 죽이지 않도록 하는 최후의 안전망. Node 15+ 기본 동작은
@@ -65,6 +81,7 @@ app.use("/api/audit-log", auditLogRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/holidays", holidaysRoutes);
 app.use("/api/totp", totpRoutes);
+app.use("/api/ip-blocklist", ipBlocklistRoutes);
 
 // 안전망: 라우트에서 놓친 에러가 있어도 서버 프로세스 자체는 죽지 않고 500만 응답하게 함.
 // [보안 강화 #7-b 정보 노출] 에러 상세는 서버 로그에만 남기고 클라이언트에는 일반 메시지만 반환.

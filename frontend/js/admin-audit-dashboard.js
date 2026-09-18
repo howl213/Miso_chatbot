@@ -374,6 +374,24 @@ const PAGE_NUMBERS_PER_GROUP = 10;
 let auditHistoryOffset = 0;
 let auditHistoryTotal = 0;
 
+// [2026-09-16] "차단" 버튼이 이미 차단된 IP에도 똑같이 떠서, 이 사건에 대해 이미 조치했는지
+// 표에서 바로 알 수 없었음 - 매번 관리 페이지로 가봐야 확인 가능했음. 현재 차단 목록을
+// 캐시해두고, IP 컬럼을 그릴 때 대조해서 "이미 차단됨"이면 버튼 색/문구를 다르게 보여준다.
+// GET /api/ip-blocklist는 security:manage 권한이 필요한데, 이 페이지는 audit:view 기준이라
+// (보통 admin은 둘 다 있지만) 혹시 없어도 감사 로그 조회 자체는 계속되게 실패를 삼킨다.
+let blockedIpMap = new Map(); // ip -> { id, expires_at, reason }
+
+async function loadIpBlocklistStatus() {
+    try {
+        const res = await fetch(`${WAS_BASE}/api/ip-blocklist`, { credentials: 'include' });
+        if (!res.ok) return;
+        const blocks = await res.json();
+        blockedIpMap = new Map(blocks.map((b) => [b.ip, b]));
+    } catch (err) {
+        console.error('[ip blocklist status] 조회 실패', err.message);
+    }
+}
+
 function renderAuditHistoryTable(rows) {
     const tbody = document.getElementById('auditHistoryList');
     const emptyState = document.getElementById('auditHistoryEmpty');
@@ -408,8 +426,50 @@ function renderAuditHistoryTable(rows) {
         // 값이 있어도 다른 항목들과 섞인 긴 문자열 안에서 찾아야 했음(체크리스트: IP 주소/
         // 요청 경로 표시). ip/path는 로그인 계열 등 거의 모든 이벤트가 이제 채워 넣지만,
         // 개념상 없을 수 있는 이벤트도 있어(예: account_role_change의 from/to는 IP 무관) '-'로 표시.
+        // [2026-09-16] 이벤트를 확인한 자리에서 바로 조치까지 이어지도록(INCIDENT_RESPONSE.md
+        // 3번 절차의 "확인→조치"를 한 화면 안에서 연결) IP 옆에 차단 버튼을 같이 둔다. 글자가
+        // 세로로 쌓이지 않도록 white-space:nowrap을 명시하고, 표 안에 들어가는 버튼이라 크기는
+        // 작게(.btn-action 기본 88px/13px 대신 padding만 최소로) 줄인다. 실제 차단 등록/해제는
+        // 관리 페이지에서만 하도록 해서(권한 체크가 페이지 진입 시 한 번만 필요) 여기서 API를
+        // 직접 부르지 않고 IP를 미리 채운 채로 이동만 시킨다.
+        const ip = row.detail?.ip;
         const ipTd = document.createElement('td');
-        ipTd.textContent = row.detail?.ip ?? '-';
+        ipTd.style.whiteSpace = 'nowrap';
+        if (ip) {
+            const ipText = document.createElement('span');
+            ipText.textContent = ip;
+
+            // [2026-09-16] 이미 차단된 IP도 항상 같은 빨간 "차단" 버튼이 떠서, 이 사건에 대해
+            // 조치를 했는지 표만 보고는 알 수 없었음 - blockedIpMap과 대조해서 이미 차단된
+            // 경우엔 버튼을 초록(.btn-action--confirm, "이미 처리됨" 톤)으로 바꾸고 문구도
+            // "차단됨"으로 바꾼다. 클릭하면(연장/해제 등 추가 조치를 위해) 관리 페이지로는
+            // 그대로 이동 가능하게 둔다.
+            const blockInfo = blockedIpMap.get(ip);
+            const blockButton = document.createElement('button');
+            blockButton.type = 'button';
+            blockButton.style.width = 'auto';
+            blockButton.style.padding = '1px 8px';
+            blockButton.style.fontSize = '11px';
+            blockButton.style.whiteSpace = 'nowrap';
+            blockButton.style.marginLeft = '6px';
+            if (blockInfo) {
+                blockButton.className = 'btn-action btn-action--confirm';
+                blockButton.textContent = '차단됨';
+                blockButton.title = blockInfo.expires_at
+                    ? `${formatDateTime(blockInfo.expires_at)}까지 차단`
+                    : '영구 차단';
+            } else {
+                blockButton.className = 'btn-action btn-action--cancel';
+                blockButton.textContent = '차단';
+            }
+            blockButton.addEventListener('click', () => {
+                window.location.href = `admin-ip-blocklist.html?ip=${encodeURIComponent(ip)}`;
+            });
+
+            ipTd.append(ipText, blockButton);
+        } else {
+            ipTd.textContent = '-';
+        }
 
         const pathTd = document.createElement('td');
         pathTd.textContent = row.detail?.path ?? '-';
@@ -522,7 +582,12 @@ async function loadAuditHistory() {
     if (from) params.set('from', from);
     if (to) params.set('to', to);
 
-    const res = await fetch(`${WAS_BASE}/api/audit-log?${params}`, { credentials: 'include' });
+    // 표를 그리기 전에 최신 차단 목록부터 받아둬야 IP 컬럼의 "차단"/"차단됨" 표시가 그 시점
+    // 기준으로 정확하다 - 병렬로 같이 받는다(둘은 서로 무관한 조회라 순서 상관없음).
+    const [res] = await Promise.all([
+        fetch(`${WAS_BASE}/api/audit-log?${params}`, { credentials: 'include' }),
+        loadIpBlocklistStatus(),
+    ]);
     if (!res.ok) {
         showToast('감사 로그 이력을 불러오지 못했습니다.');
         return;
